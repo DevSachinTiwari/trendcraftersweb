@@ -4,9 +4,15 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useAuth } from '../../../contexts/auth-context';
+import { useAuthStore } from '../../../lib/auth-store';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useMutation } from '@tanstack/react-query';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
+import { LogIn, Eye, EyeOff, Mail, Lock } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -16,9 +22,8 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { login } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
+  const authStore = useAuthStore();
   const router = useRouter();
 
   const {
@@ -29,48 +34,41 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
-  const onSubmit = async (data: LoginFormData) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        login(result.token);
-        
+  const loginMutation = useMutation({
+    mutationFn: async (data: LoginFormData) => {
+      return authStore.login(data.email, data.password);
+    },
+    onSuccess: (result) => {
+      if (result.success && result.user) {
         // Redirect based on user role
-        const userRole = result.user.role;
-        if (userRole === 'ADMIN') {
-          router.push('/dashboard/admin');
-        } else if (userRole === 'SELLER') {
-          router.push('/dashboard/seller');
-        } else {
-          router.push('/dashboard/customer');
+        switch (result.user.role) {
+          case 'ADMIN':
+            router.push('/dashboard/admin');
+            break;
+          case 'SELLER':
+            router.push('/dashboard/seller');
+            break;
+          case 'CUSTOMER':
+            router.push('/dashboard/customer');
+            break;
+          default:
+            router.push('/');
         }
-      } else {
-        setError(result.error || 'Login failed');
       }
-    } catch (err) {
-      setError('An error occurred. Please try again.');
-      console.error('Login error:', err);
-    } finally {
-      setIsLoading(false);
-    }
+    },
+  });
+
+  const onSubmit = (data: LoginFormData) => {
+    loginMutation.mutate(data);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
+          <div className="flex justify-center">
+            <LogIn className="h-12 w-12 text-indigo-600" />
+          </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Sign in to your account
           </h2>
@@ -85,57 +83,88 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
-              <input
-                {...register('email')}
-                type="email"
-                autoComplete="email"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="Enter your email"
-              />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+        <Card>
+          <CardHeader>
+            <CardTitle>Welcome back</CardTitle>
+            <CardDescription>Enter your credentials to access your account</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {(loginMutation.isError || (loginMutation.data && !loginMutation.data.success)) && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <div className="flex">
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-red-800">
+                        {loginMutation.data?.error || loginMutation.error?.message || 'Login failed'}
+                      </h3>
+                    </div>
+                  </div>
+                </div>
               )}
-            </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <input
-                {...register('password')}
-                type="password"
-                autoComplete="current-password"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="Enter your password"
-              />
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-              )}
-            </div>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email address</Label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Mail className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    className="pl-10"
+                    placeholder="Enter your email"
+                    {...register('email')}
+                  />
+                </div>
+                {errors.email && (
+                  <p className="text-sm text-red-600">{errors.email.message}</p>
+                )}
+              </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Signing in...' : 'Sign in'}
-            </button>
-          </div>
-        </form>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    className="pl-10 pr-10"
+                    placeholder="Enter your password"
+                    {...register('password')}
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                    <button
+                      type="button"
+                      className="text-gray-400 hover:text-gray-500"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                {errors.password && (
+                  <p className="text-sm text-red-600">{errors.password.message}</p>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={loginMutation.isPending}
+              >
+                {loginMutation.isPending ? 'Signing in...' : 'Sign in'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

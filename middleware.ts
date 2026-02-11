@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AuthToken } from './lib/auth-token';
-import { UserRole } from './types/auth';
+import { UserRole } from '@prisma/client';
 
 // Define protected routes and their required roles
 const protectedRoutes: Record<string, UserRole[]> = {
-  '/dashboard/admin': [UserRole.ADMIN],
-  '/dashboard/seller': [UserRole.SELLER, UserRole.ADMIN], 
-  '/dashboard/customer': [UserRole.CUSTOMER, UserRole.SELLER, UserRole.ADMIN],
-  '/profile': [UserRole.CUSTOMER, UserRole.SELLER, UserRole.ADMIN],
+  '/dashboard/admin': ['ADMIN'],
+  '/dashboard/seller': ['SELLER', 'ADMIN'], 
+  '/dashboard/customer': ['CUSTOMER', 'SELLER', 'ADMIN'],
+  '/profile': ['CUSTOMER', 'SELLER', 'ADMIN'],
 };
 
 // Routes that require authentication but no specific role

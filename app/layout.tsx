@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { AuthProvider } from '../contexts/auth-context';
+import { QueryProvider } from '../lib/query-provider';
 import Navigation from '../components/navigation';
+import AuthInitializer from '../components/auth-initializer';
 
 export const metadata: Metadata = {
   title: "ECommerce Platform",
@@ -16,10 +17,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <AuthProvider>
+        <QueryProvider>
+          <AuthInitializer />
           <Navigation />
           <main>{children}</main>
-        </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

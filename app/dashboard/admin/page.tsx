@@ -1,9 +1,9 @@
 'use client';
 
-import { useAuth } from '../../../contexts/auth-context';
+import { useAuthStore } from '../../../lib/auth-store';
 
 export default function AdminDashboard() {
-  const { user } = useAuth();
+  const { user } = useAuthStore();
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

@@ -4,9 +4,16 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useAuth } from '../../../contexts/auth-context';
+import { useAuthStore } from '../../../lib/auth-store';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useMutation } from '@tanstack/react-query';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
+import { UserPlus, Eye, EyeOff, Mail, Lock, User, Building } from 'lucide-react';
+import { UserRole } from '@prisma/client';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -27,15 +34,16 @@ const registerSchema = z.object({
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { login } = useAuth();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const authStore = useAuthStore();
   const router = useRouter();
 
   const {
     register,
     handleSubmit,
     formState: { errors },
+    watch,
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -43,62 +51,43 @@ export default function RegisterPage() {
     },
   });
 
-  const onSubmit = async (data: RegisterFormData) => {
-    setIsLoading(true);
-    setError(null);
+  const selectedRole = watch('role');
 
-    try {
-      // Remove confirmPassword from submission
-      const submitData = {
-        name: data.name,
-        email: data.email,
-        password: data.password,
-        role: data.role,
-      };
-
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(submitData),
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        login(result.token);
-        
+  const registerMutation = useMutation({
+    mutationFn: async (data: RegisterFormData) => {
+      return authStore.register(data.email, data.password, data.name, data.role as UserRole);
+    },
+    onSuccess: (result) => {
+      if (result.success && result.user) {
         // Redirect based on user role
-        const userRole = result.user.role;
-        if (userRole === 'SELLER') {
-          router.push('/dashboard/seller');
-        } else {
-          router.push('/dashboard/customer');
-        }
-      } else {
-        if (result.details) {
-          // Handle validation errors
-          const errorMessages = Array.isArray(result.details) 
-            ? result.details.map((err: { message: string }) => err.message).join(', ')
-            : result.details.join(', ');
-          setError(errorMessages);
-        } else {
-          setError(result.error || 'Registration failed');
+        switch (result.user.role) {
+          case 'ADMIN':
+            router.push('/dashboard/admin');
+            break;
+          case 'SELLER':
+            router.push('/dashboard/seller');
+            break;
+          case 'CUSTOMER':
+            router.push('/dashboard/customer');
+            break;
+          default:
+            router.push('/');
         }
       }
-    } catch (err) {
-      setError('An error occurred. Please try again.');
-      console.error('Registration error:', err);
-    } finally {
-      setIsLoading(false);
-    }
+    },
+  });
+
+  const onSubmit = (data: RegisterFormData) => {
+    registerMutation.mutate(data);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
+          <div className="flex justify-center">
+            <UserPlus className="h-12 w-12 text-indigo-600" />
+          </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Create your account
           </h2>
@@ -113,105 +102,164 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit(onSubmit)}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                Full Name
-              </label>
-              <input
-                {...register('name')}
-                type="text"
-                autoComplete="name"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="Enter your full name"
-              />
-              {errors.name && (
-                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+        <Card>
+          <CardHeader>
+            <CardTitle>Join our platform</CardTitle>
+            <CardDescription>Create an account to start shopping or selling</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              {(registerMutation.isError || (registerMutation.data && !registerMutation.data.success)) && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <div className="flex">
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-red-800">
+                        {registerMutation.data?.error || registerMutation.error?.message || 'Registration failed'}
+                      </h3>
+                    </div>
+                  </div>
+                </div>
               )}
-            </div>
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
-              <input
-                {...register('email')}
-                type="email"
-                autoComplete="email"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="Enter your email"
-              />
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-              )}
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="name">Full Name</Label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <User className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <Input
+                    id="name"
+                    type="text"
+                    autoComplete="name"
+                    className="pl-10"
+                    placeholder="Enter your full name"
+                    {...register('name')}
+                  />
+                </div>
+                {errors.name && (
+                  <p className="text-sm text-red-600">{errors.name.message}</p>
+                )}
+              </div>
 
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-                Account Type
-              </label>
-              <select
-                {...register('role')}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              <div className="space-y-2">
+                <Label htmlFor="email">Email address</Label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Mail className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    className="pl-10"
+                    placeholder="Enter your email"
+                    {...register('email')}
+                  />
+                </div>
+                {errors.email && (
+                  <p className="text-sm text-red-600">{errors.email.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="role">Account Type</Label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    {selectedRole === 'SELLER' ? (
+                      <Building className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <User className="h-4 w-4 text-gray-400" />
+                    )}
+                  </div>
+                  <select
+                    {...register('role')}
+                    className="pl-10 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="CUSTOMER">Customer - Browse and buy products</option>
+                    <option value="SELLER">Seller - Sell your products</option>
+                  </select>
+                </div>
+                {errors.role && (
+                  <p className="text-sm text-red-600">{errors.role.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    className="pl-10 pr-10"
+                    placeholder="Enter your password"
+                    {...register('password')}
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                    <button
+                      type="button"
+                      className="text-gray-400 hover:text-gray-500"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                {errors.password && (
+                  <p className="text-sm text-red-600">{errors.password.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-4 w-4 text-gray-400" />
+                  </div>
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    className="pl-10 pr-10"
+                    placeholder="Confirm your password"
+                    {...register('confirmPassword')}
+                  />
+                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                    <button
+                      type="button"
+                      className="text-gray-400 hover:text-gray-500"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                {errors.confirmPassword && (
+                  <p className="text-sm text-red-600">{errors.confirmPassword.message}</p>
+                )}
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={registerMutation.isPending}
               >
-                <option value="CUSTOMER">Customer</option>
-                <option value="SELLER">Seller</option>
-              </select>
-              {errors.role && (
-                <p className="mt-1 text-sm text-red-600">{errors.role.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <input
-                {...register('password')}
-                type="password"
-                autoComplete="new-password"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="Enter your password"
-              />
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                Confirm Password
-              </label>
-              <input
-                {...register('confirmPassword')}
-                type="password"
-                autoComplete="new-password"
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                placeholder="Confirm your password"
-              />
-              {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Creating account...' : 'Create account'}
-            </button>
-          </div>
-        </form>
+                {registerMutation.isPending ? 'Creating account...' : 'Create account'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useAuth } from '../contexts/auth-context';
+import { useAuthStore } from '../lib/auth-store';
 
 export default function HomePage() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user } = useAuthStore();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
