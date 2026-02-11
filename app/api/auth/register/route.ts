@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
         id: true,
         name: true,
         email: true,
+        mobile: true,
         role: true,
         emailVerified: true,
         createdAt: true,

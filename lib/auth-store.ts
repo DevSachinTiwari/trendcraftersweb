@@ -7,7 +7,10 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  mobile?: string | null;
+  emailVerified: boolean;
   role: UserRole;
+  profileImage?: string | null; // New field for profile image URL
   createdAt: Date;
 }
 
@@ -62,6 +65,15 @@ export const useAuthStore = create<AuthState>()(
               createdAt: new Date(data.user.createdAt)
             };
             
+            // Set the auth token in cookies
+            if (data.token) {
+              Cookies.set('auth-token', data.token, { 
+                expires: 7, // 7 days
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict'
+              });
+            }
+            
             set({ 
               user, 
               isAuthenticated: true, 
@@ -97,6 +109,15 @@ export const useAuthStore = create<AuthState>()(
               ...data.user,
               createdAt: new Date(data.user.createdAt)
             };
+            
+            // Set the auth token in cookies
+            if (data.token) {
+              Cookies.set('auth-token', data.token, { 
+                expires: 7, // 7 days
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict'
+              });
+            }
             
             set({ 
               user, 
@@ -197,11 +218,18 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-store',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ 
         user: state.user, 
         isAuthenticated: state.isAuthenticated 
       }),
+      onRehydrateStorage: () => {
+        return (state, error) => {
+          if (error) {
+            console.error('Auth store hydration error:', error);
+          }
+        };
+      },
     }
   )
 );

@@ -23,9 +23,10 @@ A complete authentication and authorization system built with Next.js 16, TypeSc
 - ✅ Session management with HTTP cookies
 - ✅ Auto token verification
 - ✅ Logout functionality
+- ✅ Profile image upload and management
 
 ### 👥 User Roles
-- **👤 Customer**: Browse products, manage orders, view profile
+- **👤 Customer**: Browse products, manage orders, view profile, upload profile image
 - **🏪 Seller**: Manage products, view sales, seller dashboard
 - **👨‍💼 Admin**: Full platform access, user management, analytics
 
@@ -34,6 +35,7 @@ A complete authentication and authorization system built with Next.js 16, TypeSc
 - ✅ Route protection middleware
 - ✅ Protected API endpoints
 - ✅ Automatic redirects for unauthorized access
+- ✅ Secure file upload with RLS policies
 
 ### 📱 User Interface
 - ✅ Responsive design with Tailwind CSS
@@ -41,6 +43,14 @@ A complete authentication and authorization system built with Next.js 16, TypeSc
 - ✅ Loading states and error handling
 - ✅ Role-specific navigation
 - ✅ Mobile-friendly layouts
+- ✅ Drag & drop image upload interface
+
+### 📁 File Management
+- ✅ Supabase Storage integration
+- ✅ Profile image upload with preview
+- ✅ Automatic image optimization
+- ✅ Secure file access with RLS
+- ✅ File type and size validation
 
 ## 🛠️ Technology Stack
 
@@ -50,9 +60,10 @@ A complete authentication and authorization system built with Next.js 16, TypeSc
 | **Language** | TypeScript | Type safety |
 | **Styling** | Tailwind CSS | Utility-first CSS |
 | **Forms** | React Hook Form + Zod | Form handling & validation |
-| **State** | React Context | Auth state management |
+| **State** | Zustand + TanStack Query | Modern state management |
 | **Backend** | Next.js API Routes | Serverless functions |
 | **Database** | PostgreSQL (Supabase) | Cloud database |
+| **Storage** | Supabase Storage | File storage & CDN |
 | **ORM** | Prisma 5.x | Database toolkit |
 | **Auth** | JWT + bcryptjs | Token-based auth |
 | **Cookies** | js-cookie | Cookie management |
@@ -85,12 +96,49 @@ JWT_SECRET="your-super-secret-jwt-key-here"
 # App Configuration
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
-# Supabase (Optional for future features)
+# Supabase - Required for Storage
 NEXT_PUBLIC_SUPABASE_URL="https://YOUR_PROJECT_REF.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="your-supabase-anon-key"
+SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"
 ```
 
-### 3. Database Setup
+### 3. Supabase Storage Setup
+
+1. **Create Storage Bucket**:
+```sql
+-- Run in Supabase SQL Editor
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('profile-images', 'profile-images', true);
+```
+
+2. **Setup Storage Policies**:
+```sql
+-- Allow authenticated users to upload their own profile images
+CREATE POLICY "Users can upload their own profile images" ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'profile-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Allow public read access to profile images
+CREATE POLICY "Public can view profile images" ON storage.objects
+FOR SELECT
+TO public
+USING (bucket_id = 'profile-images');
+
+-- Allow users to update their own profile images
+CREATE POLICY "Users can update their own profile images" ON storage.objects
+FOR UPDATE
+TO authenticated
+USING (bucket_id = 'profile-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Allow users to delete their own profile images
+CREATE POLICY "Users can delete their own profile images" ON storage.objects
+FOR DELETE
+TO authenticated
+USING (bucket_id = 'profile-images' AND auth.uid()::text = (storage.foldername(name))[1]);
+```
+
+### 4. Database Setup
 ```bash
 # Generate Prisma client
 npx prisma generate
@@ -102,7 +150,7 @@ npx prisma db push
 npx prisma studio
 ```
 
-### 4. Start Development Server
+### 5. Start Development Server
 ```bash
 npm run dev
 # Visit: http://localhost:3000
@@ -177,22 +225,32 @@ app/
 │   ├── admin/page.tsx          # Admin dashboard
 │   ├── seller/page.tsx         # Seller dashboard
 │   └── customer/page.tsx       # Customer dashboard
-├── api/auth/
-│   ├── login/route.ts          # Login API
-│   ├── register/route.ts       # Register API
-│   ├── verify/route.ts         # Verify API
-│   └── logout/route.ts         # Logout API
+├── api/
+│   ├── auth/
+│   │   ├── login/route.ts      # Login API
+│   │   ├── register/route.ts   # Register API
+│   │   ├── verify/route.ts     # Verify API
+│   │   └── logout/route.ts     # Logout API
+│   └── user/
+│       └── profile/route.ts    # Profile update API
 └── unauthorized/page.tsx       # Access denied page
 
 components/
-└── navigation.tsx              # Main navigation
-
-contexts/
-└── auth-context.tsx            # Auth state management
+├── navigation.tsx              # Main navigation
+├── auth-guard.tsx              # Route protection component
+├── auth-initializer.tsx        # Auth state initialization
+├── auth-refresher.tsx          # Token refresh component
+├── profile/
+│   └── profile-image-upload.tsx # Profile image upload
+└── ui/                         # Reusable UI components
 
 lib/
+├── auth-store.ts               # Zustand auth state
 ├── auth-token.ts               # JWT utilities
 ├── password-utils.ts           # Password hashing
+├── use-profile-image-upload.ts # Image upload hook
+├── supabase-storage.ts         # Storage utilities
+├── query-provider.tsx          # TanStack Query provider
 └── prisma.ts                   # Database client
 
 types/
@@ -223,18 +281,25 @@ middleware.ts                   # Route protection
 }
 ```
 
-### Using Auth Context
+### Using Zustand Auth Store
 ```tsx
-import { useAuth } from '../contexts/auth-context';
+import { useAuthStore } from '../lib/auth-store';
 
 function MyComponent() {
-  const { user, isAuthenticated, login, logout, hasRole } = useAuth();
+  const { user, isAuthenticated, login, logout } = useAuthStore();
 
   if (isAuthenticated) {
     return (
       <div>
         <p>Welcome, {user?.name}!</p>
-        {hasRole('ADMIN') && <AdminPanel />}
+        {user?.profileImage && (
+          <img 
+            src={user.profileImage} 
+            alt="Profile" 
+            className="w-10 h-10 rounded-full" 
+          />
+        )}
+        {user?.role === 'ADMIN' && <AdminPanel />}
         <button onClick={logout}>Logout</button>
       </div>
     );
@@ -244,12 +309,39 @@ function MyComponent() {
 }
 ```
 
+### Profile Image Upload
+```tsx
+import { ProfileImageUpload } from '@/components/profile/profile-image-upload';
+
+function UserProfile() {
+  return (
+    <div className="space-y-6">
+      <h2>Profile Settings</h2>
+      
+      {/* Profile Image Upload Component */}
+      <ProfileImageUpload 
+        showTitle={true}
+        size="lg"
+        className="max-w-md"
+      />
+      
+      {/* Other profile fields */}
+      <div>
+        {/* Name, email, etc. */}
+      </div>
+    </div>
+  );
+}
+```
+
 ### Role-Based Rendering
 ```tsx
-import { useAuth } from '../contexts/auth-context';
+import { useAuthStore } from '../lib/auth-store';
 
 function Navigation() {
-  const { hasRole } = useAuth();
+  const { user } = useAuthStore();
+  
+  const hasRole = (role: string) => user?.role === role;
 
   return (
     <nav>
@@ -363,7 +455,124 @@ NEXT_PUBLIC_APP_URL="https://yourdomain.com"
 - Account lockout protection
 - Login attempt logging
 
-## 🐛 Troubleshooting
+## � Supabase Storage Integration
+
+### Features
+
+- ✅ **Profile Image Upload**: Secure file upload for user profile pictures
+- ✅ **File Type Validation**: Support for PNG, JPG, WebP formats
+- ✅ **Size Limits**: Maximum 5MB file size with client-side validation
+- ✅ **RLS Security**: Row Level Security policies for secure access
+- ✅ **Automatic Optimization**: Next.js Image component integration
+- ✅ **Preview & Management**: Real-time preview and delete functionality
+
+### Storage Structure
+
+```
+supabase-storage/
+└── profile-images/           # Public bucket
+    └── {userId}/            # User-specific folder
+        └── {timestamp}.{ext} # Unique filename
+```
+
+### Implementation Details
+
+**Upload Process:**
+1. User selects image via drag-drop or file picker
+2. Client-side validation (type, size, dimensions)
+3. File uploaded to Supabase Storage with user ID prefix
+4. Database updated with new image URL
+5. Auth store updated with new profile data
+6. UI refreshes to show new image
+
+**Security Policies:**
+```sql
+-- Users can only upload to their own folder
+CREATE POLICY "Users can upload their own images"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'profile-images' AND 
+           auth.uid()::text = (storage.foldername(name))[1]);
+
+-- Public read access for profile images
+CREATE POLICY "Public can view profile images"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'profile-images');
+```
+
+### Usage Examples
+
+**Basic Upload Component:**
+```tsx
+import { ProfileImageUpload } from '@/components/profile/profile-image-upload';
+
+function ProfilePage() {
+  return (
+    <div>
+      <h1>My Profile</h1>
+      <ProfileImageUpload 
+        size="lg" 
+        showTitle={true}
+      />
+    </div>
+  );
+}
+```
+
+**Custom Upload Hook:**
+```tsx
+import { useProfileImageUpload } from '@/lib/use-profile-image-upload';
+
+function CustomUploadComponent() {
+  const { uploadState, uploadImage, removeImage } = useProfileImageUpload();
+  
+  const handleFileSelect = async (file: File) => {
+    try {
+      await uploadImage(file);
+      // Handle success
+    } catch (error) {
+      // Handle error
+    }
+  };
+
+  return (
+    <div>
+      {uploadState.isUploading && <p>Uploading...</p>}
+      {uploadState.error && <p>Error: {uploadState.error}</p>}
+      {/* File input component */}
+    </div>
+  );
+}
+```
+
+**Environment Variables Required:**
+```env
+# Required for Storage
+NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+```
+
+### Bucket Configuration
+
+1. **Create Bucket:**
+   ```sql
+   INSERT INTO storage.buckets (id, name, public)
+   VALUES ('profile-images', 'profile-images', true);
+   ```
+
+2. **Enable RLS:**
+   ```sql
+   ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+   ```
+
+3. **Set Policies:**
+   - Upload: Users can upload to their own folder
+   - Read: Public access for viewing
+   - Update/Delete: Users can manage their own files
+
+## �🐛 Troubleshooting
 
 ### Common Issues
 

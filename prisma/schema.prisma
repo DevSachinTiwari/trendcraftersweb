@@ -23,7 +23,8 @@ model User {
   mobile        String?
   password      String    // Required for custom auth
   emailVerified Boolean   @default(false)
-  image         String?
+  image         String?   // Legacy field - can be used for profile image URL
+  profileImage  String?   // New field for profile image URL from Supabase Storage
   role          UserRole  @default(CUSTOMER)
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")

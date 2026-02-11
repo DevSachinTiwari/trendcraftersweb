@@ -38,6 +38,35 @@ export function middleware(request: NextRequest) {
   // Get token from cookie
   const token = request.cookies.get('auth-token')?.value;
 
+  // For dashboard routes, always require authentication
+  if (pathname.startsWith('/dashboard')) {
+    if (!token) {
+      console.log('No token found for dashboard access, redirecting to login');
+      return NextResponse.redirect(new URL('/auth/login', request.url));
+    }
+
+    // Verify token
+    const payload = AuthToken.verifyToken(token);
+    if (!payload) {
+      console.log('Invalid token for dashboard access, redirecting to login');
+      const response = NextResponse.redirect(new URL('/auth/login', request.url));
+      response.cookies.delete('auth-token');
+      return response;
+    }
+
+    // Check role-based access for specific dashboard routes
+    for (const [route, allowedRoles] of Object.entries(protectedRoutes)) {
+      if (pathname.startsWith(route)) {
+        if (!allowedRoles.includes(payload.role)) {
+          console.log(`Role ${payload.role} not allowed for ${route}`);
+          return NextResponse.redirect(new URL('/unauthorized', request.url));
+        }
+      }
+    }
+
+    return NextResponse.next();
+  }
+
   if (!token) {
     // Redirect to login if no token
     return NextResponse.redirect(new URL('/auth/login', request.url));

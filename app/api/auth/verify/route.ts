@@ -30,8 +30,11 @@ export async function GET(request: NextRequest) {
         id: true,
         name: true,
         email: true,
+        mobile: true,
         role: true,
         emailVerified: true,
+        profileImage: true, // Include profile image
+        createdAt: true,     // Include created date
       }
     });
 
@@ -44,10 +47,14 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       user: {
-        id: user.id,
+        id: user.id,	
         name: user.name,
         email: user.email,
+        mobile: user.mobile,
         role: user.role,
+        emailVerified: user.emailVerified,
+        profileImage: user.profileImage,
+        createdAt: user.createdAt,
       },
       valid: true,
     });

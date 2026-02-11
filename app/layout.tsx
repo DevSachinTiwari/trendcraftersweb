@@ -3,6 +3,7 @@ import "./globals.css";
 import { QueryProvider } from '../lib/query-provider';
 import Navigation from '../components/navigation';
 import AuthInitializer from '../components/auth-initializer';
+import AuthRefresher from '../components/auth-refresher';
 
 export const metadata: Metadata = {
   title: "ECommerce Platform",
@@ -19,6 +20,7 @@ export default function RootLayout({
       <body className="antialiased">
         <QueryProvider>
           <AuthInitializer />
+          <AuthRefresher />
           <Navigation />
           <main>{children}</main>
         </QueryProvider>
